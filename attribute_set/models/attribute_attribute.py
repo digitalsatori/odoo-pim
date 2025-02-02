@@ -83,6 +83,8 @@ class AttributeAttribute(models.Model):
         "ir.model", "Relational Model", ondelete="cascade"
     )
 
+    widget = fields.Char(help="Specify widget to add to the field on the views.")
+
     required_on_views = fields.Boolean(
         "Required (on views)",
         help="If activated, the attribute will be mandatory on the views, "
@@ -111,6 +113,7 @@ class AttributeAttribute(models.Model):
     sequence = fields.Integer(
         "Sequence in Group", help="The attribute's order in his group"
     )
+    company_dependent = fields.Boolean()
 
     def _get_attrs(self):
         attrs = {
@@ -130,15 +133,11 @@ class AttributeAttribute(models.Model):
         self.ensure_one()
         kwargs = {"name": "%s" % self.name}
         kwargs["attrs"] = str(self._get_attrs())
+        if self.widget:
+            kwargs["widget"] = self.widget
 
         if self.readonly:
             kwargs["readonly"] = str(True)
-
-        if self.ttype == "many2many":
-            # TODO use an attribute field instead
-            # to let user specify the widget. For now it fixes:
-            # https://github.com/shopinvader/odoo-pim/issues/2
-            kwargs["widget"] = "many2many_tags"
 
         if self.ttype in ["many2one", "many2many"]:
             if self.relation_model_id:
@@ -230,6 +229,11 @@ class AttributeAttribute(models.Model):
         name = self.name
         if not name.startswith("x_"):
             self.name = "x_%s" % name
+
+    @api.onchange("attribute_type")
+    def onchange_attribute_type(self):
+        if self.attribute_type == "multiselect":
+            self.widget = "many2many_tags"
 
     @api.onchange("relation_model_id")
     def relation_model_id_change(self):
@@ -358,7 +362,16 @@ class AttributeAttribute(models.Model):
                 )
 
         vals["state"] = "manual"
-        return super().create(vals)
+        attr = super().create(vals)
+        if attr.company_dependent:
+            self.flush()
+            self.pool.setup_models(self._cr)
+            # update database schema of model and its descendant models
+            models = self.pool.descendants([attr.model_id._name], "_inherits")
+            self.pool.init_models(
+                self._cr, models, dict(self._context, update_custom_fields=True)
+            )
+        return attr
 
     def _delete_related_option_wizard(self, option_vals):
         """Delete the attribute's options wizards related to the attribute's options
@@ -464,7 +477,7 @@ class AttributeAttribute(models.Model):
         return res
 
     def unlink(self):
-        """ Delete the Attribute's related field when deleting a custom Attribute"""
+        """Delete the Attribute's related field when deleting a custom Attribute"""
         fields_to_remove = self.filtered(lambda s: s.nature == "custom").mapped(
             "field_id"
         )

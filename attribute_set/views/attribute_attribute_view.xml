@@ -53,6 +53,10 @@
                         name="serialized"
                         attrs="{'readonly': [('create_date', '!=', False)]}"
                     />
+                    <field
+                        name="company_dependent"
+                        attrs="{'readonly': [('create_date', '!=', False)]}"
+                    />
                 </group>
                 <separator />
                 <group col="2" class="col-6">
@@ -79,6 +83,7 @@
                         options="{'no_create': 1}"
                         invisible="context.get('from_attribute_set')"
                     />
+                    <field name="widget" />
                     <field name="required_on_views" />
                     <field name="create_date" invisible="1" />
                 </group>
